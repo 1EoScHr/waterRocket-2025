@@ -1,0 +1,7 @@
+# 所有文本文件统一使用 LF 储存
+* text=auto eol=lf
+
+# Windows-only 文件可例外设为 CRLF（比如 Keil 工程文件等）
+*.uvprojx  text eol=crlf
+*.uvoptx   text eol=crlf
+*.uvguix.* text eol=crlf
