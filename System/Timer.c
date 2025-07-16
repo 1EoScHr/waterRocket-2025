@@ -24,9 +24,9 @@ void Timer_Internal_Init(void)
 			TIM_TimeBaseInitStructure.TIM_RepetitionCounter = 0;	//重复计数器的值，高级定时器才有，置零
 			
 	//关键参数：定时频率=72M/(PSC+1)/(ARR+1)，均在0-65535间
-			TIM_TimeBaseInitStructure.TIM_Period = 1000 - 1;	//ARR自动重装器的值
+			TIM_TimeBaseInitStructure.TIM_Period = 100 - 1;	//ARR自动重装器的值
 			TIM_TimeBaseInitStructure.TIM_Prescaler = 7200 - 1;	//PSC预分频器的值
-	//这里得到0.1s的分度，更精细可以修改
+	//这里得到0.01s的分度，更精细可以修改
 			TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStructure);
 	
 			//手动清除标志位，避免刚初始化完就中断使得计时从0开始

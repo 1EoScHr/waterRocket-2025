@@ -16,35 +16,177 @@ int16_t parheight, plaheight, begheight, mostheight, nowheight;
 uint8_t height[2];
 MPU6050_Data Data;
 
-int main(void) // 硬件测试
-{
-		LED13_Init();
-		Beep_Init();
-		OLED_Init();
-		MPU6050_Init();
-		BMP280_Init();
-		
-		OLED_OpenShow();
-		
-	
-		OLED_ShowHexNum(0, 0, BMP280_ReadID(), 2, BIG);
-		OLED_ShowHexNum(0, 2, MPU6050_ReadID(), 2, BIG);
+uint8_t dummy[2];
+uint32_t dd_second = 0;
+uint8_t readhtflag = 0;
 
-		while(1)
+void Self_Detect(void) 	// 硬件自检
+{
+		uint8_t i = 3;
+		
+		LED13_Init();				// 基础硬件：user led，beep
+		Beep_Init();
+		while(i)
 		{
-			LED13_on();
-			Beep_JustLoud();
-			Delay_ms(100);
-			LED13_off();
-			Beep_Stop();
-			MPU6050_GetData(&Data);
-			OLED_ShowFloatNum(0, 6, MPU6050_CaculateAccel(&Data), 2,2, BIG);
-			OLED_ShowFloatNum(0, 4, BMP280_GetHeight(), 3, 2, BIG);
-			Delay_ms(100);
+				LED13_on();
+				Beep_JustLoud();
+				Delay_ms(250);
+				LED13_off();
+				Beep_Stop();
+				Delay_ms(250);
+				i --;
 		}
 	
+		Beep_JustLoud();LED13_on();Delay_ms(500);Beep_Stop();LED13_off();
+		
+		OLED_Init();				// 交互硬件：OLED
+		OLED_OpenShow();
+		
+		Beep_JustLoud();LED13_on();Delay_ms(500);Beep_Stop();LED13_off();
+		
+		ShortLine_Init();		// 一般硬件：shortline
+		OLED_ShowString(0, 0, "cnct stLine plz", SML);
+		while(!ShortLine())
+		{}
+		OLED_ShowString(0, 0, "plug", SML);
+		while(ShortLine())
+		{}
+		OLED_Clear();
+		
+		Beep_JustLoud();LED13_on();Delay_s(1);Beep_Stop();LED13_off();
+		
+		BMP280_Init();			// 重要硬件：气压计
+		OLED_ShowString(0, 0, "BMP280: ", BIG);
+		if(BMP280_ReadID() != 0x58)
+		{
+				OLED_ShowString(81, 0, "Wrong!", BIG);
+				LED13_on();Beep_JustLoud();
+				while(1)
+				{}
+		}
+		
+		else
+		{
+				OLED_ShowString(65, 0, "Yes", BIG);
+		}	
+		
+		uint16_t Height = BMP280_GetHeight();
+		OLED_ShowString(0, 3, "ht of now:", SML);
+		OLED_ShowNum(65, 2, Height, 3, BIG);
+		OLED_ShowString(0, 5, "blow me, plz", SML);
+		
+		uint16_t newHeight = BMP280_GetHeight();
+		while(newHeight - Height < 5)
+		{
+				OLED_ShowNum(65, 2, BMP280_GetHeight(), 3, BIG);
+				newHeight = BMP280_GetHeight();
+		}
+
+		OLED_ShowString(0, 6, "OK OK OK", BIG);
+		Delay_ms(1000);
+		
+		OLED_Clear();
+		MPU6050_Init();
+		OLED_ShowString(0, 0, "MPU6050: ", BIG);
+		OLED_ShowHexNum(0, 0, MPU6050_ReadID(), 3, BIG);
+		
+		if(BMP280_ReadID() != 0x68)
+		{
+				OLED_ShowString(72, 0, "Wrong!", BIG);
+				LED13_on();Beep_JustLoud();
+				while(1)
+				{}
+		}
+		
 }
 
+void Flash_Detect(void)
+{
+		BMP280_Init();
+		W25Q64_Init();
+		OLED_Init();
+		ShortLine_Init();
+	
+		OLED_Clear();
+	
+		//W25Q64_SectorErase(0x000000);
+
+		uint32_t addr_start = 0x000000;
+		W25Q64_ReadData(addr_start, dummy, 2);
+		uint16_t flagbit = dummy[0] << 8 | dummy[1];
+	
+		while (flagbit == 0x0F0F)
+		{
+			addr_start += 0x000100;
+			W25Q64_ReadData(addr_start, dummy, 2);
+			flagbit = dummy[0] << 8 | dummy[1];
+
+			// if (addr_start) // 溢出以后再处理
+		}
+		
+		OLED_ShowString(0, 0, "addr:", SML);
+		OLED_ShowHexNum(31, 0, addr_start, 6, SML);
+
+		uint8_t Height[256];
+		Height[0] = 0x0F; Height[1] = 0x0F;
+
+		int16_t height_begin;
+		
+		OLED_ShowString(0, 2, "cnct stline, plz", SML);
+			
+		while(!ShortLine())
+		{}
+		
+		OLED_ShowString(0, 2, "plug stline, plz", SML);
+		while (ShortLine())
+		{
+			height_begin = BMP280_GetHeight();
+			OLED_ShowNum(16, 4, height_begin, 3, BIG);
+		}
+		
+		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
+		Height[2] = height_begin >> 8; Height[3] = height_begin;
+	
+		uint16_t i = 2;
+		Timer_Internal_Init();
+		while(dd_second < 1000)
+		{
+				if(readhtflag)
+				{
+						height_begin = BMP280_GetHeight();
+						Height[2*i] = height_begin >> 8; Height[2*i+1] = height_begin;
+				}
+		}
+		
+		W25Q64_PageProgram(addr_start, Height, 256);
+		OLED_ShowString(0, 6, "Done.", BIG);
+}
+
+void TIM2_IRQHandler(void)	//选择TIM的中断处理函数，产生更新中断时会自动执行
+{		
+	if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)	//先检查中断标志位，获取TIM的更新中断标志位
+	{
+		dd_second ++;
+		if (dd_second % 10 == 0)
+		{
+				readhtflag = 1;
+		}
+		TIM_ClearITPendingBit(TIM2, TIM_IT_Update);	//清除标志位
+	}
+}
+	
+	//flagbit = dummy[0] << 8 | dummy[1];
+
+ 
+
+
+
+
+int main(void)
+{
+		//Self_Detect();
+		Flash_Detect();
+}
 
 //int main(void)
 // {

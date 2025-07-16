@@ -13,9 +13,9 @@ BMP280* bmp280 = &bmp;	//先定义再指向
 
 
 #define bmpI2C_SCL_GPIO GPIOB
-#define bmpI2C_SCL_PIN GPIO_Pin_12
+#define bmpI2C_SCL_PIN GPIO_Pin_13
 #define bmpI2C_SDA_GPIO GPIOB
-#define bmpI2C_SDA_PIN GPIO_Pin_13
+#define bmpI2C_SDA_PIN GPIO_Pin_12
 
 
 //对读写进行函数封装

@@ -745,36 +745,6 @@
               <FilePath>.\Hardware\Servo.h</FilePath>
             </File>
             <File>
-              <FileName>Motor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\Motor.c</FilePath>
-            </File>
-            <File>
-              <FileName>Motor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\Motor.h</FilePath>
-            </File>
-            <File>
-              <FileName>CounterSensor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\CounterSensor.c</FilePath>
-            </File>
-            <File>
-              <FileName>CounterSensor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\CounterSensor.h</FilePath>
-            </File>
-            <File>
-              <FileName>Encoder.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\Encoder.c</FilePath>
-            </File>
-            <File>
-              <FileName>Encoder.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\Encoder.h</FilePath>
-            </File>
-            <File>
               <FileName>leoSPI.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\leoSPI.c</FilePath>

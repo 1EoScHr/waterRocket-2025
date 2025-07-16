@@ -1,4 +1,10 @@
 #include "stm32f10x.h"                  // Device header
+#include "Delay.h"
+
+/*
+未连接：1
+已连接：0
+*/
 
 void ShortLine_Init(void) //短接线初始化
 {
@@ -15,7 +21,11 @@ uint8_t ShortLine(void)//短接线不用考虑那么多消抖一类
 	uint8_t ret=0;
 	if(!GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1))
 		{
-			ret=1;
+			Delay_ms(100);
+			if(!GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1))
+			{
+				ret=1;
+			}
 		}
 	return ret;
 }
