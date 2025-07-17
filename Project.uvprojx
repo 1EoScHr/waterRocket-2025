@@ -680,14 +680,24 @@
           <GroupName>Hardware</GroupName>
           <Files>
             <File>
-              <FileName>leoI2C.c</FileName>
+              <FileName>LED.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\Hardware\leoI2C.c</FilePath>
+              <FilePath>.\Hardware\LED.c</FilePath>
             </File>
             <File>
-              <FileName>leoI2C.h</FileName>
+              <FileName>LED.h</FileName>
               <FileType>5</FileType>
-              <FilePath>.\Hardware\leoI2C.h</FilePath>
+              <FilePath>.\Hardware\LED.h</FilePath>
+            </File>
+            <File>
+              <FileName>Beep.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\Beep.c</FilePath>
+            </File>
+            <File>
+              <FileName>Beep.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\Beep.h</FilePath>
             </File>
             <File>
               <FileName>MPU6050.c</FileName>
@@ -725,16 +735,6 @@
               <FilePath>.\Hardware\OLED_Data.h</FilePath>
             </File>
             <File>
-              <FileName>PWM.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\PWM.c</FilePath>
-            </File>
-            <File>
-              <FileName>PWM.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\PWM.h</FilePath>
-            </File>
-            <File>
               <FileName>Servo.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\Servo.c</FilePath>
@@ -743,16 +743,6 @@
               <FileName>Servo.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Hardware\Servo.h</FilePath>
-            </File>
-            <File>
-              <FileName>leoSPI.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\leoSPI.c</FilePath>
-            </File>
-            <File>
-              <FileName>leoSPI.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\leoSPI.h</FilePath>
             </File>
             <File>
               <FileName>W25Q64.c</FileName>
@@ -785,16 +775,6 @@
               <FilePath>.\Hardware\BMP280_Reg.h</FilePath>
             </File>
             <File>
-              <FileName>Beep.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\Beep.c</FilePath>
-            </File>
-            <File>
-              <FileName>Beep.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\Beep.h</FilePath>
-            </File>
-            <File>
               <FileName>ShortLine.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\ShortLine.c</FilePath>
@@ -805,14 +785,44 @@
               <FilePath>.\Hardware\ShortLine.h</FilePath>
             </File>
             <File>
-              <FileName>LED.c</FileName>
+              <FileName>PWM.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\Hardware\LED.c</FilePath>
+              <FilePath>.\Hardware\PWM.c</FilePath>
             </File>
             <File>
-              <FileName>LED.h</FileName>
+              <FileName>PWM.h</FileName>
               <FileType>5</FileType>
-              <FilePath>.\Hardware\LED.h</FilePath>
+              <FilePath>.\Hardware\PWM.h</FilePath>
+            </File>
+            <File>
+              <FileName>leoI2C.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\leoI2C.c</FilePath>
+            </File>
+            <File>
+              <FileName>leoI2C.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\leoI2C.h</FilePath>
+            </File>
+            <File>
+              <FileName>leoSPI.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\leoSPI.c</FilePath>
+            </File>
+            <File>
+              <FileName>leoSPI.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\leoSPI.h</FilePath>
+            </File>
+            <File>
+              <FileName>Serial.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\Serial.c</FilePath>
+            </File>
+            <File>
+              <FileName>Serial.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\Serial.h</FilePath>
             </File>
           </Files>
         </Group>

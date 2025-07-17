@@ -5,6 +5,7 @@
 #include "Timer.h"
 #include "Delay.h"
 #include "Servo.h"
+#include "Serial.h"
 #include "BMP280.h"
 #include "W25Q64.h"
 #include "MPU6050.h"
@@ -14,12 +15,15 @@
 MPU6050_Data Data;
 
 #define DATA_HEAD_FLAG 0x0F0F
+
+#define WORK_MODE		0
+
 uint8_t dummy[2];
 uint8_t height[256];
 uint32_t dd_second = 0;
 uint8_t readhtflag = 0;
 
-void ErrorHandle(void)
+void ErrorHandle(void)	// 报错入口
 {
 	LED13_Init();
 	Beep_Init();
@@ -31,13 +35,13 @@ void ErrorHandle(void)
 	{}
 }
 
-uint16_t flash2data(uint32_t addr)
+uint16_t flash2data(uint32_t addr)	// 将flash指定位置中的2个u8解读为u16
 {
 		W25Q64_ReadData(addr, dummy, 2);
 		return (dummy[0] << 8 | dummy[1]);
 }
 
-void data2flash(uint16_t u16, uint8_t* u8_arr, uint8_t ind)
+void data2arr(uint16_t u16, uint8_t* u8_arr, uint8_t ind)	// 将u16写进指定u8数组的ind索引处
 {
 		u8_arr[2*ind] = u16 >> 8; u8_arr[2*ind+1] = u16;
 }
@@ -149,7 +153,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 
 		//----------------------------------------------数据准备
 
-		data2flash(0x0F0F, height, 0);
+		data2arr(0x0F0F, height, 0);
 
 		int16_t height_begin;
 
@@ -167,7 +171,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		}
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
-		data2flash(height_begin, height, 1);
+		data2arr(height_begin, height, 1);
 	
 		//----------------------------------------------起飞后
 
@@ -178,7 +182,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		{
 				if(readhtflag)
 				{
-						data2flash(BMP280_GetHeight(), height, ind);
+						data2arr(BMP280_GetHeight(), height, ind);
 						readhtflag = 0;
 						ind ++;
 				}
@@ -188,15 +192,17 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
 
-void Flash_ReadLast(void)
+void Flash_ReadLast(void)	// 显示上次飞行高度数据
 {
+		W25Q64_Init();
 		OLED_Init();
 		OLED_Clear();
 		
 		uint32_t addr_emp = 0x000000;
 		if(flash2data(addr_emp) != 0x0F0F)
 		{
-			OLED_ShowString(0, 0, "Error: No data in flash!", BIG);
+			OLED_ShowString(0, 0, "Error:", SML);
+			OLED_ShowString(0, 2, "No data in flash!", SML);
 			ErrorHandle();
 		}
 
@@ -206,27 +212,86 @@ void Flash_ReadLast(void)
 		while (flash2data(addr_emp) == 0x0F0F)
 		{
 			addr_use = addr_emp;
-			addr_emp += 0x0001000;
+			addr_emp += 0x000100;
 		}
+		
+		OLED_ShowString(0, 0, "read addr: ", SML);
+		OLED_ShowHexNum(67,0, addr_use, 6, SML);
 		
 		W25Q64_ReadData(addr_use, height, 256);
 		
 		uint16_t hst = height[2]<<8 | height[3];
-		OLED_ShowString(0, 0, "start:", BIG);
-		OLED_ShowNum(57, 0, hst, 3, BIG);
+		OLED_ShowString(0, 2, "start:", BIG);
+		OLED_ShowNum(57, 2, hst, 3, BIG);
 
 		for(uint8_t ind = 2; ind < 128; ind ++)
 		{
-			if(hst <  height[2*ind]<<8 | height[2*ind+1])
+			if(hst <  (height[2*ind]<<8 | height[2*ind+1]))
 			{
-				hst = height[2*ind]<<8 | height[2*ind+1];
+				hst = (height[2*ind]<<8 | height[2*ind+1]);
 			}
 		}
 
-		OLED_ShowString(0, 2, "hmost:", BIG);
-		OLED_ShowNum(57, 0, hst, 3, BIG);		
+		OLED_ShowString(0, 4, "hmost:", BIG);
+		OLED_ShowNum(57, 4, hst, 3, BIG);		
 }
 
+
+void Height_UART2PC(void)
+{
+		W25Q64_Init();
+		Serial_Init();
+		OLED_Init();
+	
+		OLED_Clear();
+	
+		uint32_t addr = 0x000000;
+		uint8_t ind = 1;
+	
+		while (flash2data(addr) == 0x0F0F)
+		{
+			W25Q64_ReadData(addr, height, 256);
+			Serial_SendByte(0xFF);
+			Serial_SendByte(0xFF);
+			Serial_SendByte(0xFF);
+			Serial_SendByte(0xFF);
+			Serial_SendArray(height, 256);
+			
+			addr += 0x000100;
+			ind ++;
+		}
+	
+		OLED_ShowString(0, 0, "Send Done.", BIG);
+		OLED_ShowString(0, 2, "Total:", BIG);
+		OLED_ShowNum(57, 2, ind-1, 3, BIG);
+}
+
+
+int main(void)
+{
+			if(WORK_MODE == 0)
+			{
+					Flash_ReadLast();Delay_s(5);
+					
+					Height_Flash();
+			}
+		
+			else
+			{	
+					if(WORK_MODE == 1)
+					{
+					Height_UART2PC();
+					}
+					
+					else
+					{
+								W25Q64_Init();
+								W25Q64_SectorErase(0x000000);
+					}
+			}
+}
+
+         
 void TIM2_IRQHandler(void)	//选择TIM的中断处理函数，产生更新中断时会自动执行
 {		
 		if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)	//先检查中断标志位，获取TIM的更新中断标志位
@@ -239,190 +304,7 @@ void TIM2_IRQHandler(void)	//选择TIM的中断处理函数，产生更新中断时会自动执行
 			TIM_ClearITPendingBit(TIM2, TIM_IT_Update);	//清除标志位
 		}
 }
-	
-int main(void)
-{
-		//Self_Detect();
-		Flash_Detect();
-}
 
-//int main(void)
-// {
-//			{/*//测试用高度计代码部分
-//			OLED_Init(); OLED_OpenShow();	//开机动画
-//			BMP280_Init();
-//			W25Q64_Init();
-//			Beep_Init();
-//	 
-//			OLED_ShowString(0, 0,"last:", BIG);
-//			W25Q64_ReadData(0x000000, height, 2);
-//			OLED_ShowNum(0, 2, (height[0] << 8) + height[1], 3, BIG);
-//			Delay_s(10);
-//			
-//			Beep_JustLoud();
-//			Delay_ms(750);
-//			Beep_Stop();
-//			Delay_ms(1000);
-//			Beep_JustLoud();
-//			Delay_ms(750);
-//			Beep_Stop();
-//			Delay_ms(1000);
-//			Beep_JustLoud();
-//			Delay_ms(750);
-//			Beep_Stop();
-//			
-//			OLED_Clear();
-//			
-//			OLED_ShowString(0, 0, "now:", BIG);
-//			OLED_ShowString(48, 0, "beg:", BIG);
-//			OLED_ShowString(96, 0, "mst:", BIG);
-//	
-//			beginheight = BMP280_GetHeight();
-//			OLED_ShowNum(48, 2, beginheight, 3, BIG);
-//			OLED_ShowChar(72, 2, 'm', BIG);
-//	
-//			mostheight = beginheight;
-//			OLED_ShowNum(96, 2, mostheight, 3, BIG);
-//			OLED_ShowChar(120, 2, 'm', BIG);
-//	
-//			OLED_ShowChar(24, 2, 'm', BIG);
-//			
-//			while (1)
-//			{
-//			/////////////////////////////////////////////////////////////////////////////////////高度显示
-//			nowheight=BMP280_GetHeight();
-//			OLED_ShowNum(0, 2, nowheight, 3, BIG);
 
-//			if (nowheight > mostheight)
-//			{
-//					mostheight = nowheight;
-//					height[0] = mostheight >> 8;
-//					height[1] = mostheight;
-//					W25Q64_SectorErase(0x000000);
-//					W25Q64_PageProgram(0x000000, height, 2);
-//			}
-//			
-//			OLED_ShowNum(96, 2, mostheight, 3, BIG);
-//			}
-//			*/}
-//			
-//		{//实际飞控部分
-//			
-//			/*---------------------------相关硬件初始化---------------------------*/
-//		
-//			ShortLine_Init();	//
-//			LED13_Init();
-//			Beep_Init();
-//			Servo_Init();
-//			BMP280_Init();
-//			OLED_Init();
-//			W25Q64_Init();
-//			MPU6050_Init();
-//				
-//			/*------------------------------舵角归零------------------------------*/
-//			
-//			Servo1_SetAngle(0);
-//			Servo2_SetAngle(0);	
-//			
-//			/*------------------------------OLED开屏------------------------------*/
-//			
-//			OLED_OpenShow();	
-//			
-//			/*----------------------------显示上次数据----------------------------*/
-//			
-//			OLED_ShowString(0, 0,"last:", BIG);
-//			W25Q64_ReadData(0x000000, height, 2);
-//			OLED_ShowNum(0, 2, (height[0] << 8) + height[1], 3, BIG);
-//			Delay_s(3);
-//			OLED_Clear();
-//			
-//			/*----------------------------做好显示准备----------------------------*/
-//			
-//			OLED_ShowString(0, 0, "BEGa&h:", BIG);
-//			OLED_ShowString(0, 2, "PLAN:", BIG);
-//			OLED_ShowString(0, 4, "PARA:", BIG);
-//			OLED_ShowString(0, 6, "MOST:", BIG);
-//			
-//				
-//			/*---------------------第一次长鸣：检测短接线情况---------------------*/
-//			
-//			Beep_JustLoud();	
-//			LED13_on();
-//			Delay_ms(500);
-//			while(ShortLine() == 0)	//未接短接线一直长鸣
-//			{
-//					
-//			}
-//				
-//			Beep_Stop();	//直到接上停止
-//			LED13_off();
-//			
-//			/*-----------------------第二次短鸣：准备好发射-----------------------*/
-//			
-//			while(ShortLine())
-//			{
-//					Beep_Stop();
-//					Delay_ms(200);
-//					LED13_on();
-//					Beep_JustLoud();
-//					Delay_ms(200);
-//					LED13_off();
-//					
-//					if(ShortLine() == 0)
-//					{
-//							Delay_ms(50);	//适度延时，防止插入短接线时抖动
-//					}	
-//			}
-//				
-//			/*-------------------------------发射后-------------------------------*/
-//			
-//			MPU6050_GetData(&Data);	//获取并显示离架加速度数据
-//			OLED_ShowFloatNum(54, 0, MPU6050_CaculateAccel(&Data), 2, 3, SML); 
-//			
-//			OLED_ShowNum(54, 1, mostheight = BMP280_GetHeight(), 3, SML);	//显示初始高度
-//			
-//			for(int i = 0; i < 7; i ++)	//抛飞机
-//			{
-//					LED13_on();
-//					Delay_ms(500);
-//					LED13_off();
-//					nowheight = BMP280_GetHeight();
-//					if(nowheight > mostheight)
-//					{
-//							OLED_ShowNum(48, 6, mostheight = nowheight, 3, BIG);
-//					}
-//			}
-//			
-//			Servo1_SetAngle(90);
-//			OLED_ShowNum(48, 2, BMP280_GetHeight(), 3, BIG);	//显示抛飞机高度
-//			
-//			
-//			Delay_ms(500);	//开伞
-//			Servo2_SetAngle(90);
-//			OLED_ShowNum(48, 4, nowheight = BMP280_GetHeight(), 3, BIG);	//显示开伞高度
-//			
-//			/*---------------------完成后记录最大高度便于改进---------------------*/
-//			
-//			Beep_Stop();
-//			OLED_ShowNum(48, 6, mostheight, 3, BIG);
-//			
-//			while(1)
-//			{
-//					nowheight = BMP280_GetHeight();
-//				
-//					if(nowheight > mostheight)
-//					{	
-//							OLED_ShowNum(48, 6, mostheight = nowheight, 3, BIG);
-//						
-//							height[0] = mostheight >> 8;
-//							height[1] = mostheight;
-//							W25Q64_SectorErase(0x000000);
-//							W25Q64_PageProgram(0x000000, height, 2);
-//					}
-//			}                                     
-//			
-//		}
-//			                            
-// }
-//	                                            
-                                                                                                                                                                                                                                                                   
+
+
