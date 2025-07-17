@@ -11,14 +11,36 @@
 #include "ShortLine.h"
 #include "OLED_Simple.h"
 
-
-int16_t parheight, plaheight, begheight, mostheight, nowheight;
-uint8_t height[2];
 MPU6050_Data Data;
 
+#define DATA_HEAD_FLAG 0x0F0F
 uint8_t dummy[2];
+uint8_t height[256];
 uint32_t dd_second = 0;
 uint8_t readhtflag = 0;
+
+void ErrorHandle(void)
+{
+	LED13_Init();
+	Beep_Init();
+
+	LED13_on();
+	Beep_JustLoud();
+
+	while(1)
+	{}
+}
+
+uint16_t flash2data(uint32_t addr)
+{
+		W25Q64_ReadData(addr, dummy, 2);
+		return (dummy[0] << 8 | dummy[1]);
+}
+
+void data2flash(uint16_t u16, uint8_t* u8_arr, uint8_t ind)
+{
+		u8_arr[2*ind] = u16 >> 8; u8_arr[2*ind+1] = u16;
+}
 
 void Self_Detect(void) 	// 硬件自检
 {
@@ -100,40 +122,40 @@ void Self_Detect(void) 	// 硬件自检
 		
 }
 
-void Flash_Detect(void)
+void Height_Flash(void)	// 飞行中高度数据记录
 {
+		//----------------------------------------------初始化
+	
+		OLED_Init();
 		BMP280_Init();
 		W25Q64_Init();
-		OLED_Init();
 		ShortLine_Init();
 	
 		OLED_Clear();
-	
 		//W25Q64_SectorErase(0x000000);
 
 		uint32_t addr_start = 0x000000;
-		W25Q64_ReadData(addr_start, dummy, 2);
-		uint16_t flagbit = dummy[0] << 8 | dummy[1];
-	
-		while (flagbit == 0x0F0F)
+
+		//----------------------------------------------确定起始地址
+
+		while (flash2data(addr_start) == DATA_HEAD_FLAG)
 		{
 			addr_start += 0x000100;
-			W25Q64_ReadData(addr_start, dummy, 2);
-			flagbit = dummy[0] << 8 | dummy[1];
-
 			// if (addr_start) // 溢出以后再处理
 		}
 		
 		OLED_ShowString(0, 0, "addr:", SML);
 		OLED_ShowHexNum(31, 0, addr_start, 6, SML);
 
-		uint8_t Height[256];
-		Height[0] = 0x0F; Height[1] = 0x0F;
+		//----------------------------------------------数据准备
+
+		data2flash(0x0F0F, height, 0);
 
 		int16_t height_begin;
-		
+
+		//----------------------------------------------接线提示&初始高度
+
 		OLED_ShowString(0, 2, "cnct stline, plz", SML);
-			
 		while(!ShortLine())
 		{}
 		
@@ -145,43 +167,79 @@ void Flash_Detect(void)
 		}
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
-		Height[2] = height_begin >> 8; Height[3] = height_begin;
+		data2flash(height_begin, height, 1);
 	
-		uint16_t i = 2;
+		//----------------------------------------------起飞后
+
+		uint8_t ind = 2;
 		Timer_Internal_Init();
-		while(dd_second < 1000)
+
+		while(dd_second < 1200)
 		{
 				if(readhtflag)
 				{
-						height_begin = BMP280_GetHeight();
-						Height[2*i] = height_begin >> 8; Height[2*i+1] = height_begin;
+						data2flash(BMP280_GetHeight(), height, ind);
+						readhtflag = 0;
+						ind ++;
 				}
 		}
 		
-		W25Q64_PageProgram(addr_start, Height, 256);
+		W25Q64_PageProgram(addr_start, height, 256);
 		OLED_ShowString(0, 6, "Done.", BIG);
+}
+
+void Flash_ReadLast(void)
+{
+		OLED_Init();
+		OLED_Clear();
+		
+		uint32_t addr_emp = 0x000000;
+		if(flash2data(addr_emp) != 0x0F0F)
+		{
+			OLED_ShowString(0, 0, "Error: No data in flash!", BIG);
+			ErrorHandle();
+		}
+
+		uint32_t addr_use = addr_emp;
+		addr_emp += 0x000100;
+
+		while (flash2data(addr_emp) == 0x0F0F)
+		{
+			addr_use = addr_emp;
+			addr_emp += 0x0001000;
+		}
+		
+		W25Q64_ReadData(addr_use, height, 256);
+		
+		uint16_t hst = height[2]<<8 | height[3];
+		OLED_ShowString(0, 0, "start:", BIG);
+		OLED_ShowNum(57, 0, hst, 3, BIG);
+
+		for(uint8_t ind = 2; ind < 128; ind ++)
+		{
+			if(hst <  height[2*ind]<<8 | height[2*ind+1])
+			{
+				hst = height[2*ind]<<8 | height[2*ind+1];
+			}
+		}
+
+		OLED_ShowString(0, 2, "hmost:", BIG);
+		OLED_ShowNum(57, 0, hst, 3, BIG);		
 }
 
 void TIM2_IRQHandler(void)	//选择TIM的中断处理函数，产生更新中断时会自动执行
 {		
-	if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)	//先检查中断标志位，获取TIM的更新中断标志位
-	{
-		dd_second ++;
-		if (dd_second % 10 == 0)
+		if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)	//先检查中断标志位，获取TIM的更新中断标志位
 		{
+			dd_second ++;
+			if (dd_second % 10 == 0)
+			{
 				readhtflag = 1;
+			}
+			TIM_ClearITPendingBit(TIM2, TIM_IT_Update);	//清除标志位
 		}
-		TIM_ClearITPendingBit(TIM2, TIM_IT_Update);	//清除标志位
-	}
 }
 	
-	//flagbit = dummy[0] << 8 | dummy[1];
-
- 
-
-
-
-
 int main(void)
 {
 		//Self_Detect();
