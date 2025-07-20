@@ -15,7 +15,6 @@
 MPU6050_Data Data;
 
 #define DATA_HEAD_FLAG 0x0F0F
-
 #define WORK_MODE		0
 
 uint8_t dummy[2];
@@ -28,8 +27,7 @@ void ErrorHandle(void)	// 报错入口
 	LED13_Init();
 	Beep_Init();
 
-	LED13_on();
-	Beep_JustLoud();
+	LED13_on();Beep_JustLoud();
 
 	while(1)
 	{}
@@ -54,11 +52,9 @@ void Self_Detect(void) 	// 硬件自检
 		Beep_Init();
 		while(i)
 		{
-				LED13_on();
-				Beep_JustLoud();
+				LED13_on();Beep_JustLoud();
 				Delay_ms(250);
-				LED13_off();
-				Beep_Stop();
+				LED13_off();Beep_Stop();
 				Delay_ms(250);
 				i --;
 		}
@@ -164,11 +160,13 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		{}
 		
 		OLED_ShowString(0, 2, "plug stline, plz", SML);
+		LED13_on();Beep_JustLoud();
 		while (ShortLine())
 		{
 			height_begin = BMP280_GetHeight();
 			OLED_ShowNum(16, 4, height_begin, 3, BIG);
 		}
+		LED13_off();Beep_Stop();
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
 		data2arr(height_begin, height, 1);
@@ -191,6 +189,76 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		W25Q64_PageProgram(addr_start, height, 256);
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
+
+void Height_Flash_Control(void)	// 飞控
+{
+		//----------------------------------------------初始化
+	
+		Servo_Init();
+		OLED_Init();
+		BMP280_Init();
+		W25Q64_Init();
+		ShortLine_Init();
+		OLED_Clear();
+		Servo1_SetAngle(0);
+		Servo2_SetAngle(0);
+
+		uint32_t addr_start = 0x000000;
+
+		//----------------------------------------------确定起始地址
+
+		while (flash2data(addr_start) == DATA_HEAD_FLAG)
+		{
+			addr_start += 0x000100;
+		}
+		
+		OLED_ShowString(0, 0, "addr:", SML);
+		OLED_ShowHexNum(31, 0, addr_start, 6, SML);
+
+		//----------------------------------------------数据准备
+
+		data2arr(0x0F0F, height, 0);
+
+		int16_t height_begin;
+
+		//----------------------------------------------接线提示&初始高度
+
+		OLED_ShowString(0, 2, "cnct stline, plz", SML);
+		while(!ShortLine())
+		{
+		}
+		
+		OLED_ShowString(0, 2, "plug stline, plz", SML);
+		LED13_on();Beep_JustLoud();
+		while (ShortLine())
+		{
+			height_begin = BMP280_GetHeight();
+			OLED_ShowNum(16, 4, height_begin, 3, BIG);
+		}
+		LED13_off();Beep_Stop();
+		
+		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
+		data2arr(height_begin, height, 1);
+	
+		//----------------------------------------------起飞后
+
+		uint8_t ind = 2;
+		Timer_Internal_Init();
+
+		while(dd_second < 1200)
+		{
+				if(readhtflag)
+				{
+						data2arr(BMP280_GetHeight(), height, ind);
+						readhtflag = 0;
+						ind ++;
+				}
+		}
+		
+		W25Q64_PageProgram(addr_start, height, 256);
+		OLED_ShowString(0, 6, "Done.", BIG);
+}
+
 
 void Flash_ReadLast(void)	// 显示上次飞行高度数据
 {
@@ -271,7 +339,7 @@ int main(void)
 {
 			if(WORK_MODE == 0)
 			{
-					Flash_ReadLast();Delay_s(5);
+					//Flash_ReadLast();Delay_s(5);
 					
 					Height_Flash();
 			}
