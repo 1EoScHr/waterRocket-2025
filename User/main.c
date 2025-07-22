@@ -110,16 +110,48 @@ void Self_Detect(void) 	// 硬件自检
 		OLED_Clear();
 		MPU6050_Init();
 		OLED_ShowString(0, 0, "MPU6050: ", BIG);
-		OLED_ShowHexNum(0, 0, MPU6050_ReadID(), 3, BIG);
 		
-		if(BMP280_ReadID() != 0x68)
+		if(MPU6050_ReadID() != 0x68)
 		{
 				OLED_ShowString(72, 0, "Wrong!", BIG);
 				LED13_on();Beep_JustLoud();
 				while(1)
 				{}
 		}
+		else
+		{
+				OLED_ShowString(65, 0, "Yes", BIG);
+		}	
 		
+		MPU6050_GetData(&Data);
+		float acc = MPU6050_CaculateAccel(&Data);
+		OLED_ShowString(0, 3, "acc of now:", SML);
+		OLED_ShowFloatNum(71, 2, acc, 2, 2, BIG);
+		OLED_ShowString(0, 5, "shake me, plz", SML);
+		
+		MPU6050_GetData(&Data);
+		float newAcc = MPU6050_CaculateAccel(&Data);
+		while(newAcc - acc < 3)
+		{
+				OLED_ShowFloatNum(71, 2, newAcc, 2, 2, BIG);
+				MPU6050_GetData(&Data);
+				newAcc = MPU6050_CaculateAccel(&Data);
+		}
+
+		OLED_ShowString(0, 6, "OK OK OK", BIG);
+		Delay_ms(1000);
+		
+		
+		OLED_Clear();
+		W25Q64_Init();
+		OLED_ShowString(0, 0, "W25Q64: ", BIG);
+		uint8_t MID;
+		uint16_t DID;
+		W25Q64_ReadID(&MID, &DID);
+		OLED_ShowString(0, 3, "MID:", SML);
+		OLED_ShowHexNum(33, 3, MID, 2, SML);
+		OLED_ShowString(0, 4, "DID:", SML);
+		OLED_ShowHexNum(33, 4, DID, 2, SML);
 }
 
 void Height_Flash(void)	// 飞行中高度数据记录
@@ -194,14 +226,17 @@ void Height_Flash_Control(void)	// 飞控
 {
 		//----------------------------------------------初始化
 	
-		Servo_Init();
+//		Servo_Init();
+		LED13_Init();
+		Beep_Init();
 		OLED_Init();
 		BMP280_Init();
 		W25Q64_Init();
+		MPU6050_Init();
 		ShortLine_Init();
 		OLED_Clear();
-		Servo1_SetAngle(0);
-		Servo2_SetAngle(0);
+//		Servo1_SetAngle(0);
+//		Servo2_SetAngle(0);
 
 		uint32_t addr_start = 0x000000;
 
@@ -222,18 +257,20 @@ void Height_Flash_Control(void)	// 飞控
 		int16_t height_begin;
 
 		//----------------------------------------------接线提示&初始高度
-
-		OLED_ShowString(0, 2, "cnct stline, plz", SML);
-		while(!ShortLine())
-		{
-		}
 		
-		OLED_ShowString(0, 2, "plug stline, plz", SML);
+		OLED_ShowString(0, 2, "take off, plz", SML);
 		LED13_on();Beep_JustLoud();
-		while (ShortLine())
+		
+		MPU6050_GetData(&Data);
+		float acc = MPU6050_CaculateAccel(&Data);
+		
+		LED13_on();Beep_JustLoud();
+		while (acc < 2.5)
 		{
 			height_begin = BMP280_GetHeight();
 			OLED_ShowNum(16, 4, height_begin, 3, BIG);
+			MPU6050_GetData(&Data);
+			acc = MPU6050_CaculateAccel(&Data);
 		}
 		LED13_off();Beep_Stop();
 		
@@ -339,9 +376,9 @@ int main(void)
 {
 			if(WORK_MODE == 0)
 			{
-					//Flash_ReadLast();Delay_s(5);
+					Flash_ReadLast();Delay_s(5);
 					
-					Height_Flash();
+					Height_Flash_Control();
 			}
 		
 			else
@@ -357,6 +394,8 @@ int main(void)
 								W25Q64_SectorErase(0x000000);
 					}
 			}
+
+//			Self_Detect();
 }
 
          
