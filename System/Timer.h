@@ -1,7 +1,8 @@
 #ifndef __TIMER_H
 #define __TIMER_H
 
-void Timer_Internal_Init(void);	//¶¨Ê±Æ÷¶¨Ê±ÖÐ¶Ï³õÊ¼»¯
-void Timer_External_Init(void);	//Íâ²¿ÖÐ¶Ï¶¨Ê±Æ÷(¼ÆÊýÆ÷)
+void Timer_Internal_Init(void);	//ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½Ê±ï¿½Ð¶Ï³ï¿½Ê¼ï¿½ï¿½
+void Timer_External_Init(void);	//ï¿½â²¿ï¿½Ð¶Ï¶ï¿½Ê±ï¿½ï¿½(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
+void Timer_Internal_DeInit(void);
 
 #endif

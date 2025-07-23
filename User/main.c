@@ -17,8 +17,9 @@ MPU6050_Data Data;
 #define DATA_HEAD_FLAG 0x0F0F
 #define WORK_MODE		0
 
-uint8_t dummy[2];
+uint8_t dummy[4];
 uint8_t height[256];
+uint8_t accel[256];
 uint32_t dd_second = 0;
 uint8_t readhtflag = 0;
 
@@ -33,15 +34,29 @@ void ErrorHandle(void)	// 报错入口
 	{}
 }
 
-uint16_t flash2data(uint32_t addr)	// 将flash指定位置中的2个u8解读为u16
+uint16_t flash2ht(uint32_t addr)	// 将flash指定位置中的2个u8解读为u16
 {
 		W25Q64_ReadData(addr, dummy, 2);
 		return (dummy[0] << 8 | dummy[1]);
 }
 
-void data2arr(uint16_t u16, uint8_t* u8_arr, uint8_t ind)	// 将u16写进指定u8数组的ind索引处
+void ht2arr(uint16_t u16, uint8_t* u8_arr, uint8_t ind)	// 将u16写进指定u8数组的ind索引处
 {
 		u8_arr[2*ind] = u16 >> 8; u8_arr[2*ind+1] = u16;
+}
+
+float flash2ac(uint32_t addr)	// 将flash指定位置中的4个u8解读为float
+{
+		W25Q64_ReadData(addr, dummy, 4);
+		return (float)(dummy[0] << 24 | dummy[1] << 16 | dummy[2] << 8 | dummy[1]);
+}
+
+void ac2arr(float acc, uint8_t* u8_arr, uint8_t ind)	// 将float写进指定u8数组的ind索引处
+{
+		u8_arr[4*ind] = acc >> 24;
+		u8_arr[4*ind+1] = acc >> 16;
+		u8_arr[4*ind+2] = acc >> 8;
+		u8_arr[4*ind+3] = acc;
 }
 
 void Self_Detect(void) 	// 硬件自检
@@ -170,7 +185,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 
 		//----------------------------------------------确定起始地址
 
-		while (flash2data(addr_start) == DATA_HEAD_FLAG)
+		while (flash2ht(addr_start) == DATA_HEAD_FLAG)
 		{
 			addr_start += 0x000100;
 			// if (addr_start) // 溢出以后再处理
@@ -181,7 +196,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 
 		//----------------------------------------------数据准备
 
-		data2arr(0x0F0F, height, 0);
+		ht2arr(0x0F0F, height, 0);
 
 		int16_t height_begin;
 
@@ -201,7 +216,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		LED13_off();Beep_Stop();
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
-		data2arr(height_begin, height, 1);
+		ht2arr(height_begin, height, 1);
 	
 		//----------------------------------------------起飞后
 
@@ -212,7 +227,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		{
 				if(readhtflag)
 				{
-						data2arr(BMP280_GetHeight(), height, ind);
+						ht2arr(BMP280_GetHeight(), height, ind);
 						readhtflag = 0;
 						ind ++;
 				}
@@ -222,19 +237,18 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
 
+void EscapeTower(void)
+{
+
+
+
+
+}
+
 void Height_Flash_Control(void)	// 飞控
 {
 		//----------------------------------------------初始化
-	
-//		Servo_Init();
-		LED13_Init();
-		Beep_Init();
-		OLED_Init();
-		BMP280_Init();
-		W25Q64_Init();
-		MPU6050_Init();
-		ShortLine_Init();
-		OLED_Clear();
+
 //		Servo1_SetAngle(0);
 //		Servo2_SetAngle(0);
 
@@ -242,7 +256,7 @@ void Height_Flash_Control(void)	// 飞控
 
 		//----------------------------------------------确定起始地址
 
-		while (flash2data(addr_start) == DATA_HEAD_FLAG)
+		while(flash2ht(addr_start) == DATA_HEAD_FLAG)
 		{
 			addr_start += 0x000100;
 		}
@@ -252,31 +266,41 @@ void Height_Flash_Control(void)	// 飞控
 
 		//----------------------------------------------数据准备
 
-		data2arr(0x0F0F, height, 0);
-
+		ht2arr(0x0F0F, height, 0);
+		ht2arr(0x0F0F, accel, 0);
 		int16_t height_begin;
+		float acc;
+
+		//----------------------------------------------上架静默时间，防止逃逸塔误触
+
+		for(uint8_t i = 0; i < 15; i ++)
+		{
+			LED13_on();Beep_JustLoud();
+			Delay_ms(1000);
+			LED13_off();Beep_Stop();
+			Delay_ms(1000);
+		}
 
 		//----------------------------------------------接线提示&初始高度
 		
 		OLED_ShowString(0, 2, "take off, plz", SML);
-		LED13_on();Beep_JustLoud();
 		
-		MPU6050_GetData(&Data);
-		float acc = MPU6050_CaculateAccel(&Data);
+		acc = MPU6050_CaculateAccel(&Data);
 		
 		LED13_on();Beep_JustLoud();
 		while (acc < 2.5)
 		{
 			height_begin = BMP280_GetHeight();
 			OLED_ShowNum(16, 4, height_begin, 3, BIG);
-			MPU6050_GetData(&Data);
 			acc = MPU6050_CaculateAccel(&Data);
 		}
 		LED13_off();Beep_Stop();
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
-		data2arr(height_begin, height, 1);
-	
+
+		ht2arr(height_begin, height, 1);
+		
+
 		//----------------------------------------------起飞后
 
 		uint8_t ind = 2;
@@ -286,7 +310,7 @@ void Height_Flash_Control(void)	// 飞控
 		{
 				if(readhtflag)
 				{
-						data2arr(BMP280_GetHeight(), height, ind);
+						ht2arr(BMP280_GetHeight(), height, ind);
 						readhtflag = 0;
 						ind ++;
 				}
@@ -304,7 +328,7 @@ void Flash_ReadLast(void)	// 显示上次飞行高度数据
 		OLED_Clear();
 		
 		uint32_t addr_emp = 0x000000;
-		if(flash2data(addr_emp) != 0x0F0F)
+		if(flash2ht(addr_emp) != 0x0F0F)
 		{
 			OLED_ShowString(0, 0, "Error:", SML);
 			OLED_ShowString(0, 2, "No data in flash!", SML);
@@ -314,7 +338,7 @@ void Flash_ReadLast(void)	// 显示上次飞行高度数据
 		uint32_t addr_use = addr_emp;
 		addr_emp += 0x000100;
 
-		while (flash2data(addr_emp) == 0x0F0F)
+		while (flash2ht(addr_emp) == 0x0F0F)
 		{
 			addr_use = addr_emp;
 			addr_emp += 0x000100;
@@ -353,7 +377,7 @@ void Height_UART2PC(void)
 		uint32_t addr = 0x000000;
 		uint8_t ind = 1;
 	
-		while (flash2data(addr) == 0x0F0F)
+		while (flash2ht(addr) == 0x0F0F)
 		{
 			W25Q64_ReadData(addr, height, 256);
 			Serial_SendByte(0xFF);
@@ -374,6 +398,16 @@ void Height_UART2PC(void)
 
 int main(void)
 {
+			//		Servo_Init();
+			LED13_Init();
+			Beep_Init();
+			OLED_Init();
+			BMP280_Init();
+			W25Q64_Init();
+			MPU6050_Init();
+			ShortLine_Init();
+			OLED_Clear();
+	
 			if(WORK_MODE == 0)
 			{
 					Flash_ReadLast();Delay_s(5);

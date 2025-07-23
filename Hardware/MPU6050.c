@@ -255,6 +255,7 @@ float MPU6050_CaculateAccel(MPU6050_Data *Data)	//
 			
 			//初始化时，定义的均为最大量程
 	
+			MPU6050_GetData(Data);
 			return sqrt((Data->AX)*(Data->AX)+(Data->AY)*(Data->AY)+(Data->AZ)*(Data->AZ)) * 0.00048828125;
 }
 

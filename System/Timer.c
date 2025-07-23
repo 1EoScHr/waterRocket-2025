@@ -50,6 +50,19 @@ void Timer_Internal_Init(void)
 			TIM_Cmd(TIM2, ENABLE);
 }
 
+void Timer_Internal_DeInit(void)
+{
+    // 关闭定时器
+    TIM_Cmd(TIM2, DISABLE);
+
+    // 禁用更新中断（不再向 NVIC 发中断请求）
+    TIM_ITConfig(TIM2, TIM_IT_Update, DISABLE);
+
+    // 清除中断挂起标志位，避免误触发
+    TIM_ClearFlag(TIM2, TIM_FLAG_Update);
+}
+
+
 void Timer_External_Init(void)	//外部中断定时器(计数器)
 {
 			//在内部中断的模板之上修改即可，重复的注释删掉

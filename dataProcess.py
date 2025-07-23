@@ -1,4 +1,4 @@
-def parse_hex_data(hex_str):
+def uartDataProcess(hex_str):
     # 1. 转换为列表（去掉空格）
     hex_list = hex_str.strip().split()
     hex_list = [int(x, 16) for x in hex_list]
@@ -45,7 +45,7 @@ def plot_height_data(u16_list, segment_idx=1):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.show()
+    plt.savefig("output.jpg")
 
 
 # 示例数据（你可以替换成从文件读取等方式）

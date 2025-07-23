@@ -25,4 +25,7 @@ JLinkLog.txt
 *.Administrator
 *.uvopt
 Library/*
+.idea/
+.vscode/
+
 
