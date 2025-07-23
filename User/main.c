@@ -1,6 +1,10 @@
+#include <stdint.h>
+#include <string.h>
+#include <math.h>
+
 #include "stm32f10x.h"
 #include "LED.h"
-#include <math.h>
+#include "Key.h"
 #include "Beep.h"
 #include "Timer.h"
 #include "Delay.h"
@@ -15,13 +19,14 @@
 MPU6050_Data Data;
 
 #define DATA_HEAD_FLAG 0x0F0F
-#define WORK_MODE		0
 
 uint8_t dummy[4];
 uint8_t height[256];
 uint8_t accel[256];
 uint32_t dd_second = 0;
-uint8_t readhtflag = 0;
+uint8_t workModeFlag = 0;
+uint8_t readhtFlag = 0;
+uint8_t readacFlag = 0;
 
 void ErrorHandle(void)	// 报错入口
 {
@@ -34,7 +39,7 @@ void ErrorHandle(void)	// 报错入口
 	{}
 }
 
-uint16_t flash2ht(uint32_t addr)	// 将flash指定位置中的2个u8解读为u16
+uint16_t flash2flag(uint32_t addr)	// 将flash指定位置中的2个u8解读为u16，只用于找包头
 {
 		W25Q64_ReadData(addr, dummy, 2);
 		return (dummy[0] << 8 | dummy[1]);
@@ -42,22 +47,22 @@ uint16_t flash2ht(uint32_t addr)	// 将flash指定位置中的2个u8解读为u16
 
 void ht2arr(uint16_t u16, uint8_t* u8_arr, uint8_t ind)	// 将u16写进指定u8数组的ind索引处
 {
-		u8_arr[2*ind] = u16 >> 8; u8_arr[2*ind+1] = u16;
+		u8_arr[2*ind] = u16 >> 8;
+		u8_arr[2*ind+1] = u16;
 }
 
-float flash2ac(uint32_t addr)	// 将flash指定位置中的4个u8解读为float
+float arr2ac(uint8_t* arr, uint8_t ind)// 将arr中指定ind处的4个u8解读为float
 {
-		W25Q64_ReadData(addr, dummy, 4);
-		return (float)(dummy[0] << 24 | dummy[1] << 16 | dummy[2] << 8 | dummy[1]);
+    float result;
+    memcpy(&result, arr+4*ind, sizeof(float));
+    return result;
 }
 
-void ac2arr(float acc, uint8_t* u8_arr, uint8_t ind)	// 将float写进指定u8数组的ind索引处
+void ac2arr(float acc, uint8_t* u8_arr, uint8_t ind)// 将float写进指定u8数组的ind索引处
 {
-		u8_arr[4*ind] = acc >> 24;
-		u8_arr[4*ind+1] = acc >> 16;
-		u8_arr[4*ind+2] = acc >> 8;
-		u8_arr[4*ind+3] = acc;
+    memcpy(&u8_arr[4 * ind], &acc, sizeof(float));
 }
+
 
 void Self_Detect(void) 	// 硬件自检
 {
@@ -185,7 +190,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 
 		//----------------------------------------------确定起始地址
 
-		while (flash2ht(addr_start) == DATA_HEAD_FLAG)
+		while (flash2flag(addr_start) == DATA_HEAD_FLAG)
 		{
 			addr_start += 0x000100;
 			// if (addr_start) // 溢出以后再处理
@@ -225,10 +230,10 @@ void Height_Flash(void)	// 飞行中高度数据记录
 
 		while(dd_second < 1200)
 		{
-				if(readhtflag)
+				if(readhtFlag)
 				{
 						ht2arr(BMP280_GetHeight(), height, ind);
-						readhtflag = 0;
+						readhtFlag = 0;
 						ind ++;
 				}
 		}
@@ -237,7 +242,7 @@ void Height_Flash(void)	// 飞行中高度数据记录
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
 
-void EscapeTower(void)
+void EscapeTower(void)	// 逃逸塔
 {
 
 
@@ -256,7 +261,7 @@ void Height_Flash_Control(void)	// 飞控
 
 		//----------------------------------------------确定起始地址
 
-		while(flash2ht(addr_start) == DATA_HEAD_FLAG)
+		while(flash2flag(addr_start) == DATA_HEAD_FLAG)
 		{
 			addr_start += 0x000100;
 		}
@@ -268,7 +273,7 @@ void Height_Flash_Control(void)	// 飞控
 
 		ht2arr(0x0F0F, height, 0);
 		ht2arr(0x0F0F, accel, 0);
-		int16_t height_begin;
+		uint16_t height_begin;
 		float acc;
 
 		//----------------------------------------------上架静默时间，防止逃逸塔误触
@@ -276,9 +281,9 @@ void Height_Flash_Control(void)	// 飞控
 		for(uint8_t i = 0; i < 15; i ++)
 		{
 			LED13_on();Beep_JustLoud();
-			Delay_ms(1000);
+			Delay_ms(900);
 			LED13_off();Beep_Stop();
-			Delay_ms(1000);
+			Delay_ms(900);
 		}
 
 		//----------------------------------------------接线提示&初始高度
@@ -288,70 +293,79 @@ void Height_Flash_Control(void)	// 飞控
 		acc = MPU6050_CaculateAccel(&Data);
 		
 		LED13_on();Beep_JustLoud();
-		while (acc < 2.5)
+		while (acc < 2.3)
 		{
 			height_begin = BMP280_GetHeight();
-			OLED_ShowNum(16, 4, height_begin, 3, BIG);
+			OLED_ShowNum(0, 4, height_begin, 3, BIG);
 			acc = MPU6050_CaculateAccel(&Data);
+			OLED_ShowFloatNum(30, 4, acc, 2, 2, BIG);
 		}
 		LED13_off();Beep_Stop();
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
 
 		ht2arr(height_begin, height, 1);
+		ac2arr(acc, accel, 1);
 		
 
 		//----------------------------------------------起飞后
 
-		uint8_t ind = 2;
+		uint8_t htInd = 2, acInd = 2;
 		Timer_Internal_Init();
 
-		while(dd_second < 1200)
+		while(dd_second < 1201)
 		{
-				if(readhtflag)
+				if(readhtFlag)
 				{
-						ht2arr(BMP280_GetHeight(), height, ind);
-						readhtflag = 0;
-						ind ++;
+						ht2arr(BMP280_GetHeight(), height, htInd);
+						readhtFlag = 0;
+						htInd ++;
 				}
-		}
+				
+				if(readacFlag)
+				{
+						ac2arr(MPU6050_CaculateAccel(&Data), accel, acInd);
+						readacFlag = 0;
+						acInd ++;
+				}
+		}						
 		
 		W25Q64_PageProgram(addr_start, height, 256);
+		W25Q64_PageProgram(addr_start+0x000100, accel, 256);
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
 
 
 void Flash_ReadLast(void)	// 显示上次飞行高度数据
 {
-		W25Q64_Init();
-		OLED_Init();
 		OLED_Clear();
 		
 		uint32_t addr_emp = 0x000000;
-		if(flash2ht(addr_emp) != 0x0F0F)
+		if(flash2flag(addr_emp) != 0x0F0F)
 		{
-			OLED_ShowString(0, 0, "Error:", SML);
+			OLED_ShowString(0, 0, "Warning:", SML);
 			OLED_ShowString(0, 2, "No data in flash!", SML);
-			ErrorHandle();
+			return;
 		}
 
 		uint32_t addr_use = addr_emp;
 		addr_emp += 0x000100;
 
-		while (flash2ht(addr_emp) == 0x0F0F)
+		while (flash2flag(addr_emp) == 0x0F0F)
 		{
 			addr_use = addr_emp;
 			addr_emp += 0x000100;
 		}
 		
-		OLED_ShowString(0, 0, "read addr: ", SML);
-		OLED_ShowHexNum(67,0, addr_use, 6, SML);
+		OLED_ShowString(0, 0, "read ht addr: ", SML);
+		OLED_ShowHexNum(85,0, addr_use-0x000100, 6, SML);
+		OLED_ShowString(0, 1, "read ac addr: ", SML);
+		OLED_ShowHexNum(85,1, addr_use, 6, SML);
 		
-		W25Q64_ReadData(addr_use, height, 256);
-		
+		W25Q64_ReadData(addr_use-0x000100, height, 256);
 		uint16_t hst = height[2]<<8 | height[3];
-		OLED_ShowString(0, 2, "start:", BIG);
-		OLED_ShowNum(57, 2, hst, 3, BIG);
+		OLED_ShowString(0, 3, "start:", SML);
+		OLED_ShowNum(37, 3, hst, 3, BIG);
 
 		for(uint8_t ind = 2; ind < 128; ind ++)
 		{
@@ -361,30 +375,51 @@ void Flash_ReadLast(void)	// 显示上次飞行高度数据
 			}
 		}
 
-		OLED_ShowString(0, 4, "hmost:", BIG);
-		OLED_ShowNum(57, 4, hst, 3, BIG);		
+		OLED_ShowString(71, 3, "hmo:", SML);
+		OLED_ShowNum(95, 3, hst, 3, BIG);		
+		
+		W25Q64_ReadData(addr_use, accel, 256);
+		float acst = arr2ac(accel, 1);
+		OLED_ShowString(0, 6, "start:", SML);
+		OLED_ShowFloatNum(37, 6, acst, 1, 2, SML);
+
+		for(uint8_t ind = 2; ind < 64; ind ++)
+		{
+			if(acst <  arr2ac(accel, ind))
+			{
+				acst = arr2ac(accel, ind);
+			}
+		}
+
+		OLED_ShowString(72, 6, "amo:", SML);
+		OLED_ShowFloatNum(96, 6, hst, 2, 1, SML);		
 }
 
 
 void Height_UART2PC(void)
 {
-		W25Q64_Init();
-		Serial_Init();
-		OLED_Init();
-	
 		OLED_Clear();
 	
 		uint32_t addr = 0x000000;
 		uint8_t ind = 1;
 	
-		while (flash2ht(addr) == 0x0F0F)
+		while (flash2flag(addr) == 0x0F0F)
 		{
+			Serial_SendByte(0xFF);
+			Serial_SendByte(0xFF);
+			Serial_SendByte(0xFF);
+			Serial_SendByte(0xFF);
 			W25Q64_ReadData(addr, height, 256);
-			Serial_SendByte(0xFF);
-			Serial_SendByte(0xFF);
-			Serial_SendByte(0xFF);
-			Serial_SendByte(0xFF);
 			Serial_SendArray(height, 256);
+			addr += 0x000100;
+			
+			
+			Serial_SendByte(0xEE);
+			Serial_SendByte(0xEE);
+			Serial_SendByte(0xEE);
+			Serial_SendByte(0xEE);
+			W25Q64_ReadData(addr, accel, 256);
+			Serial_SendArray(accel, 256);
 			
 			addr += 0x000100;
 			ind ++;
@@ -398,36 +433,49 @@ void Height_UART2PC(void)
 
 int main(void)
 {
-			//		Servo_Init();
+			Key_Init();
+			//Servo_Init();
 			LED13_Init();
 			Beep_Init();
 			OLED_Init();
 			BMP280_Init();
 			W25Q64_Init();
+			Serial_Init();
 			MPU6050_Init();
-			ShortLine_Init();
+			//ShortLine_Init();
 			OLED_Clear();
 	
-			if(WORK_MODE == 0)
+	
+			OLED_ShowString(0, 0, "If send data to UART,", SML);
+			OLED_ShowString(0, 1, "press Key plz.", SML);
+			OLED_ShowString(0, 3, "Now:", SML);
+			for(uint8_t i = 0; i < 31; i ++)
+			{
+					workModeFlag = Key_GetState();
+					OLED_ShowNum(30, 3, workModeFlag, 1, BIG);
+					Delay_ms(100);
+				
+					if(workModeFlag)
+					{
+							Height_UART2PC();
+							break;
+					}
+			}
+	
+			
+			
+			if(workModeFlag == 0)
 			{
 					Flash_ReadLast();Delay_s(5);
-					
+					OLED_Clear();
 					Height_Flash_Control();
 			}
-		
-			else
-			{	
-					if(WORK_MODE == 1)
-					{
-					Height_UART2PC();
-					}
-					
-					else
-					{
-								W25Q64_Init();
-								W25Q64_SectorErase(0x000000);
-					}
-			}
+	
+
+//					{
+//								W25Q64_Init();
+//								W25Q64_SectorErase(0x000000);
+//					}
 
 //			Self_Detect();
 }
@@ -438,9 +486,17 @@ void TIM2_IRQHandler(void)	//选择TIM的中断处理函数，产生更新中断时会自动执行
 		if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)	//先检查中断标志位，获取TIM的更新中断标志位
 		{
 			dd_second ++;
-			if (dd_second % 10 == 0)
+			if (dd_second % 20 == 0)
 			{
-				readhtflag = 1;
+					readhtFlag = 1;
+					readacFlag = 1;
+			}
+			else
+			{
+				if (dd_second % 10 == 0)
+				{
+					readhtFlag = 1;
+				}
 			}
 			TIM_ClearITPendingBit(TIM2, TIM_IT_Update);	//清除标志位
 		}
