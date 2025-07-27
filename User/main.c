@@ -20,13 +20,12 @@ MPU6050_Data Data;
 
 #define DATA_HEAD_FLAG 0x0F0F
 
+uint32_t d_second = 0;
 uint8_t dummy[4];
-uint8_t height[256];
 uint8_t accel[256];
-uint32_t dd_second = 0;
+uint8_t height[256];
 uint8_t workModeFlag = 0;
-uint8_t readhtFlag = 0;
-uint8_t readacFlag = 0;
+uint8_t htInd = 2, acInd = 2;
 
 void ErrorHandle(void)	// 报错入口
 {
@@ -174,80 +173,28 @@ void Self_Detect(void) 	// 硬件自检
 		OLED_ShowHexNum(33, 4, DID, 2, SML);
 }
 
-void Height_Flash(void)	// 飞行中高度数据记录
+void EscapeTower(void)	// 逃逸塔
 {
-		//----------------------------------------------初始化
+		uint8_t lastInd = 0;
 	
-		OLED_Init();
-		BMP280_Init();
-		W25Q64_Init();
-		ShortLine_Init();
-	
-		OLED_Clear();
-		//W25Q64_SectorErase(0x000000);
-
-		uint32_t addr_start = 0x000000;
-
-		//----------------------------------------------确定起始地址
-
-		while (flash2flag(addr_start) == DATA_HEAD_FLAG)
+		while(d_second < 11)
 		{
-			addr_start += 0x000100;
-			// if (addr_start) // 溢出以后再处理
-		}
-		
-		OLED_ShowString(0, 0, "addr:", SML);
-		OLED_ShowHexNum(31, 0, addr_start, 6, SML);
-
-		//----------------------------------------------数据准备
-
-		ht2arr(0x0F0F, height, 0);
-
-		int16_t height_begin;
-
-		//----------------------------------------------接线提示&初始高度
-
-		OLED_ShowString(0, 2, "cnct stline, plz", SML);
-		while(!ShortLine())
-		{}
-		
-		OLED_ShowString(0, 2, "plug stline, plz", SML);
-		LED13_on();Beep_JustLoud();
-		while (ShortLine())
-		{
-			height_begin = BMP280_GetHeight();
-			OLED_ShowNum(16, 4, height_begin, 3, BIG);
-		}
-		LED13_off();Beep_Stop();
-		
-		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
-		ht2arr(height_begin, height, 1);
-	
-		//----------------------------------------------起飞后
-
-		uint8_t ind = 2;
-		Timer_Internal_Init();
-
-		while(dd_second < 1200)
-		{
-				if(readhtFlag)
+				if(lastInd == acInd)
 				{
-						ht2arr(BMP280_GetHeight(), height, ind);
-						readhtFlag = 0;
-						ind ++;
+						continue;
+				}
+				
+				lastInd = acInd;
+				
+				if(arr2ac(accel, acInd) > 5.0)
+				{
+						return;
 				}
 		}
 		
-		W25Q64_PageProgram(addr_start, height, 256);
-		OLED_ShowString(0, 6, "Done.", BIG);
-}
-
-void EscapeTower(void)	// 逃逸塔
-{
-
-
-
-
+		Dlg_relese();
+		Para_relese();
+		OLED_ShowString(0, 2, "Oh, escapeTower trig :(  ", SML);
 }
 
 void Height_Flash_Control(void)	// 飞控
@@ -278,13 +225,13 @@ void Height_Flash_Control(void)	// 飞控
 
 		//----------------------------------------------上架静默时间，防止逃逸塔误触
 
-		for(uint8_t i = 0; i < 15; i ++)
-		{
-			LED13_on();Beep_JustLoud();
-			Delay_ms(900);
-			LED13_off();Beep_Stop();
-			Delay_ms(900);
-		}
+//		for(uint8_t i = 0; i < 15; i ++)
+//		{
+//			LED13_on();Beep_JustLoud();
+//			Delay_ms(900);
+//			LED13_off();Beep_Stop();
+//			Delay_ms(900);
+//		}
 
 		//----------------------------------------------接线提示&初始高度
 		
@@ -293,7 +240,7 @@ void Height_Flash_Control(void)	// 飞控
 		acc = MPU6050_CaculateAccel(&Data);
 		
 		LED13_on();Beep_JustLoud();
-		while (acc < 2.3)
+		while (acc < 2.1)
 		{
 			height_begin = BMP280_GetHeight();
 			OLED_ShowNum(0, 4, height_begin, 3, BIG);
@@ -310,31 +257,22 @@ void Height_Flash_Control(void)	// 飞控
 
 		//----------------------------------------------起飞后
 
-		uint8_t htInd = 2, acInd = 2;
+		
 		Timer_Internal_Init();
+		
+		//EscapeTower(); // 第一秒在逃逸塔内
 
-		while(dd_second < 1201)
+		while(d_second < 121)
 		{
-				if(readhtFlag)
-				{
-						ht2arr(BMP280_GetHeight(), height, htInd);
-						readhtFlag = 0;
-						htInd ++;
-				}
-				
-				if(readacFlag)
-				{
-						ac2arr(MPU6050_CaculateAccel(&Data), accel, acInd);
-						readacFlag = 0;
-						acInd ++;
-				}
-		}						
+			OLED_ShowNum(64, 7, d_second, 3, SML);
+		}		
+
+		Timer_Internal_DeInit();
 		
 		W25Q64_PageProgram(addr_start, height, 256);
 		W25Q64_PageProgram(addr_start+0x000100, accel, 256);
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
-
 
 void Flash_ReadLast(void)	// 显示上次飞行高度数据
 {
@@ -392,7 +330,7 @@ void Flash_ReadLast(void)	// 显示上次飞行高度数据
 		}
 
 		OLED_ShowString(72, 6, "amo:", SML);
-		OLED_ShowFloatNum(96, 6, hst, 2, 1, SML);		
+		OLED_ShowFloatNum(96, 6, acst, 2, 1, SML);			
 }
 
 
@@ -436,7 +374,7 @@ int main(void)
 			Key_Init();
 			//Servo_Init();
 			LED13_Init();
-			Beep_Init();
+			//Beep_Init();
 			OLED_Init();
 			BMP280_Init();
 			W25Q64_Init();
@@ -481,23 +419,21 @@ int main(void)
 }
 
          
-void TIM2_IRQHandler(void)	//选择TIM的中断处理函数，产生更新中断时会自动执行
+void TIM2_IRQHandler(void)	//TIM2的中断处理函数，产生更新中断时会自动执行
 {		
 		if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)	//先检查中断标志位，获取TIM的更新中断标志位
 		{
-			dd_second ++;
-			if (dd_second % 20 == 0)
+			d_second ++;
+			
+			ht2arr(BMP280_GetHeight(), height, htInd);
+			htInd ++;
+			
+			if (d_second & 1)
 			{
-					readhtFlag = 1;
-					readacFlag = 1;
+					ac2arr(MPU6050_CaculateAccel(&Data), accel, acInd);
+					acInd ++;
 			}
-			else
-			{
-				if (dd_second % 10 == 0)
-				{
-					readhtFlag = 1;
-				}
-			}
+			
 			TIM_ClearITPendingBit(TIM2, TIM_IT_Update);	//清除标志位
 		}
 }

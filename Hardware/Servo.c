@@ -28,3 +28,13 @@ void Servo3_SetAngle(float Angle)
 			//角度在0-180，据协议CCR应在500-2500，有换算关系：
 			PWM_SetCompare1(Angle / 180 *2000 + 500);
 }
+
+void Para_relese(void)	//开伞
+{
+		Servo1_SetAngle(90);
+}
+
+void Dlg_relese(void)		//释放DLG
+{
+		Servo2_SetAngle(90);
+}
