@@ -195,7 +195,25 @@ void EscapeTower(void)	// 逃逸塔
 		Dlg_relese();
 		Para_relese();
 		OLED_ShowString(0, 2, "Oh, escapeTower trig :(  ", SML);
+		ErrorHandle();
 }
+
+/*
+
+h = a*t*t + b*t + c
+
+
+
+*/
+
+
+
+
+
+
+
+
+
 
 void Height_Flash_Control(void)	// 飞控
 {
@@ -334,7 +352,7 @@ void Flash_ReadLast(void)	// 显示上次飞行高度数据
 }
 
 
-void Height_UART2PC(void)
+void Data_UART2PC(void)
 {
 		OLED_Clear();
 	
@@ -395,25 +413,19 @@ int main(void)
 				
 					if(workModeFlag)
 					{
-							Height_UART2PC();
-							break;
+							Data_UART2PC();
+							return;
 					}
 			}
+		
+			Flash_ReadLast();Delay_s(5);
+			OLED_Clear();
+			Height_Flash_Control();
 	
-			
-			
-			if(workModeFlag == 0)
-			{
-					Flash_ReadLast();Delay_s(5);
-					OLED_Clear();
-					Height_Flash_Control();
-			}
-	
-
-//					{
-//								W25Q64_Init();
-//								W25Q64_SectorErase(0x000000);
-//					}
+//			{
+//						W25Q64_Init();
+//						W25Q64_SectorErase(0x000000);
+//			}
 
 //			Self_Detect();
 }
