@@ -78,11 +78,12 @@ float time_for_velocity(float vy0, float v_target) {
     return -logf(term) / 0.15;
 }
 
-// 计算到达最高点时间
+// 根据数据计算到达最高点时间
 float time_to_apex(float vy0) {
     return logf(1.0f + (0.15 * vy0) / 9.81) / 0.15;
 }
 
+// 根据数据计算t时刻的速度
 float y_future(float t, float y0, float vy0) {
     return y0 + (1.0f/0.15) * (vy0 + 9.81/0.15) * (1.0f - expf(-0.15 * t)) - (9.81/0.15) * t;
 }
@@ -116,6 +117,9 @@ void TCM_oneAir(void)
 		
 		OLED_ShowFloatNum(0, 0, y0, 3, 2, BIG);
 		OLED_ShowFloatNum(0, 2, vy0, 3, 2, BIG);
+		
+		OLED_ShowFloatNum(0, 4, time_for_velocity(vy0, 3.0), 2, 2, BIG);
+		OLED_ShowFloatNum(0, 6, time_to_apex(vy0), 2, 2, BIG);
 }
 
 

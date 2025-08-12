@@ -19,13 +19,31 @@
 
 MPU6050_Data Data;
 
-#define DATA_HEAD_FLAG 0x0F0F
+#define DEBUG_MODE
+
+#define DATA_HEAD_FLAG 0x0F
+#define DATA_HEAD_FLAG_ALL 0x0F0F
+// ÌÓÒÝËþãÐÖµ
 #define ACC_THRESHOLD  3.0
+
+union HEIGHT
+{
+		uint8_t u8[256];
+		uint16_t u16[128];
+};
+
+union ACCEL
+{
+		uint8_t u8[256];
+		float f32[64];
+};
 
 uint32_t d_second = 0;
 uint8_t dummy[4];
-uint8_t accel[256];
-uint8_t height[256];
+//uint8_t accel[256];
+//uint8_t height[256];
+union HEIGHT height;
+union ACCEL accel;
 uint8_t workModeFlag = 0;
 uint8_t htInd = 1, acInd = 1;
 uint8_t htFlag = 0, acFlag = 0;
@@ -43,6 +61,9 @@ uint16_t flash2flag(uint32_t addr)	// ½«flashÖ¸¶¨Î»ÖÃÖÐµÄ2¸öu8½â¶ÁÎªu16£¬Ö»ÓÃÓÚÕ
 		W25Q64_ReadData(addr, dummy, 2);
 		return (dummy[0] << 8 | dummy[1]);
 }
+
+/*
+// ÕâÀïÓÐ4¸ö¹¤¾ßº¯Êý£¬·Ö±ðÊÇÉÏ·½µÄflash2flagÓëÏÂÃæÈý¸ö£¬ÓÉÓÚÊý¾Ý½á¹¹ÖØ¹¹ÎªÁªºÏÌå¶øÓÃ²»ÉÏ£¬ËùÒÔ½«Æä×¢ÊÍ
 
 void ht2arr(uint16_t u16, uint8_t* u8_arr, uint8_t ind)	// ½«u16Ð´½øÖ¸¶¨u8Êý×éµÄindË÷Òý´¦
 {
@@ -62,6 +83,7 @@ void ac2arr(float acc, uint8_t* u8_arr, uint8_t ind)// ½«floatÐ´½øÖ¸¶¨u8Êý×éµÄin
     memcpy(&u8_arr[4 * ind], &acc, sizeof(float));
 }
 
+*/
 static inline void DataFresh(void)
 {
 		/*
@@ -71,13 +93,15 @@ static inline void DataFresh(void)
 		if(htFlag)
 		{
 				htFlag = 0;
-				ht2arr(BMP280_GetHeight(), height, ++htInd);
+				//ht2arr(BMP280_GetHeight(), height, ++htInd);
+				height.u16[++htInd] = BMP280_GetHeight();
 		}
 
 		if(acFlag)
 		{
 				acFlag = 0;
-				ac2arr(MPU6050_CaculateAccel(&Data), accel, ++acInd);
+				//ac2arr(MPU6050_CaculateAccel(&Data), accel, ++acInd);
+				accel.f32[++acInd] = MPU6050_CaculateAccel(&Data);
 		}
 }
 
@@ -195,10 +219,13 @@ void EscapeTower(uint32_t addr)	// ÌÓÒÝËþ
 {
 		uint8_t lastInd = 1;
 	
-		if(arr2ac(accel, lastInd) > ACC_THRESHOLD)
+		//if(arr2ac(accel, lastInd) > ACC_THRESHOLD)
+		if(accel.f32[lastInd] > ACC_THRESHOLD)
 		{
 				return;
 		}
+		
+		
 	
 		while(d_second < 11)
 		{
@@ -211,7 +238,8 @@ void EscapeTower(uint32_t addr)	// ÌÓÒÝËþ
 				
 				lastInd = acInd;
 				
-				if(arr2ac(accel, acInd) > ACC_THRESHOLD)
+				//if(arr2ac(accel, acInd) > ACC_THRESHOLD)
+				if(accel.f32[acInd] > ACC_THRESHOLD)
 				{
 						return;
 				}
@@ -226,8 +254,8 @@ void EscapeTower(uint32_t addr)	// ÌÓÒÝËþ
 				DataFresh();
 		}
 		
-		W25Q64_PageProgram(addr, height, 256);
-		W25Q64_PageProgram(addr+0x000100, accel, 256);
+		W25Q64_PageProgram(addr, height.u8, 256);
+		W25Q64_PageProgram(addr+0x000100, accel.u8, 256);
 		OLED_ShowString(0, 3, "Done.", SML);
 }
 
@@ -236,14 +264,14 @@ void Height_Flash_Control(void)	// ·É¿Ø
 {
 		//----------------------------------------------³õÊ¼»¯
 
-//		Servo1_SetAngle(0);
-//		Servo2_SetAngle(0);
+		Servo1_SetAngle(0);
+		Servo2_SetAngle(0);
 
 		uint32_t addr_start = 0x000000;
 
 		//----------------------------------------------È·¶¨ÆðÊ¼µØÖ·
 
-		while(flash2flag(addr_start) == DATA_HEAD_FLAG)
+		while(flash2flag(addr_start) == DATA_HEAD_FLAG_ALL)
 		{
 			addr_start += 0x000100;
 		}
@@ -253,20 +281,24 @@ void Height_Flash_Control(void)	// ·É¿Ø
 
 		//----------------------------------------------Êý¾Ý×¼±¸
 
-		ht2arr(0x0F0F, height, 0);
-		ht2arr(0x0F0F, accel, 0);
+		//ht2arr(0x0F0F, height, 0);
+		height.u8[0] = height.u8[1] = DATA_HEAD_FLAG;
+		//ht2arr(0x0F0F, accel, 0);
+		accel.u8[0] = accel.u8[1] = DATA_HEAD_FLAG;
 		uint16_t height_begin;
 		float acc;
 
 		//----------------------------------------------ÉÏ¼Ü¾²Ä¬Ê±¼ä£¬·ÀÖ¹ÌÓÒÝËþÎó´¥
-
-//		for(uint8_t i = 0; i < 15; i ++)
-//		{
-//			LED13_on();Beep_JustLoud();
-//			Delay_ms(900);
-//			LED13_off();Beep_Stop();
-//			Delay_ms(900);
-//		}
+		
+		#ifndef DEBUG_MODE
+		for(uint8_t i = 0; i < 15; i ++)
+		{
+			LED13_on();Beep_JustLoud();
+			Delay_ms(900);
+			LED13_off();Beep_Stop();
+			Delay_ms(900);
+		}
+		#endif
 
 		//----------------------------------------------½ÓÏßÌáÊ¾&³õÊ¼¸ß¶È
 		
@@ -286,9 +318,10 @@ void Height_Flash_Control(void)	// ·É¿Ø
 		
 		OLED_ShowString(0, 2, "OK, thanks :)    ", SML);
 
-		ht2arr(height_begin, height, 1);
-		ac2arr(acc, accel, 1);
-		
+		//ht2arr(height_begin, height, 1);
+		height.u16[1] = height_begin;
+		//ac2arr(acc, accel, 1);
+		accel.f32[1] = acc;	
 
 		//----------------------------------------------Æð·Éºó
 
@@ -305,8 +338,10 @@ void Height_Flash_Control(void)	// ·É¿Ø
 
 		Timer_Internal_DeInit();
 		
-		W25Q64_PageProgram(addr_start, height, 256);
-		W25Q64_PageProgram(addr_start+0x000100, accel, 256);
+		//W25Q64_PageProgram(addr_start, height, 256);
+		W25Q64_PageProgram(addr_start, height.u8, 256);
+		//W25Q64_PageProgram(addr_start+0x000100, accel, 256);
+		W25Q64_PageProgram(addr_start+0x000100, accel.u8, 256);
 		OLED_ShowString(0, 6, "Done.", BIG);
 }
 
@@ -336,32 +371,38 @@ void Flash_ReadLast(void)	// ÏÔÊ¾ÉÏ´Î·ÉÐÐ¸ß¶ÈÊý¾Ý
 		OLED_ShowString(0, 1, "read ac addr: ", SML);
 		OLED_ShowHexNum(85,1, addr_use, 6, SML);
 		
-		W25Q64_ReadData(addr_use-0x000100, height, 256);
-		uint16_t hst = height[2]<<8 | height[3];
+		W25Q64_ReadData(addr_use-0x000100, height.u8, 256);
+		//uint16_t hst = height[2]<<8 | height[3];
+		uint16_t hst = height.u16[1];
 		OLED_ShowString(0, 3, "start:", SML);
 		OLED_ShowNum(37, 3, hst, 3, BIG);
 
 		for(uint8_t ind = 2; ind < 128; ind ++)
 		{
-			if(hst <  (height[2*ind]<<8 | height[2*ind+1]))
+			//if(hst <  (height[2*ind]<<8 | height[2*ind+1]))
+			if(hst < height.u16[ind])
 			{
-				hst = (height[2*ind]<<8 | height[2*ind+1]);
+				//hst = (height[2*ind]<<8 | height[2*ind+1]);
+				hst = height.u16[ind];
 			}
 		}
 
 		OLED_ShowString(71, 3, "hmo:", SML);
 		OLED_ShowNum(95, 3, hst, 3, BIG);		
 		
-		W25Q64_ReadData(addr_use, accel, 256);
-		float acst = arr2ac(accel, 1);
+		W25Q64_ReadData(addr_use, accel.u8, 256);
+		//float acst = arr2ac(accel, 1);
+		float acst = accel.f32[1];
 		OLED_ShowString(0, 6, "start:", SML);
 		OLED_ShowFloatNum(37, 6, acst, 1, 2, SML);
 
 		for(uint8_t ind = 2; ind < 64; ind ++)
 		{
-			if(acst <  arr2ac(accel, ind))
+			//if(acst <  arr2ac(accel, ind))
+			if(acst <  accel.f32[ind])
 			{
-				acst = arr2ac(accel, ind);
+				//acst = arr2ac(accel, ind);
+				acst = accel.f32[ind];
 			}
 		}
 
@@ -383,8 +424,8 @@ void Data_UART2PC(void)
 			Serial_SendByte(0xFF);
 			Serial_SendByte(0xFF);
 			Serial_SendByte(0xFF);
-			W25Q64_ReadData(addr, height, 256);
-			Serial_SendArray(height, 256);
+			W25Q64_ReadData(addr, height.u8, 256);
+			Serial_SendArray(height.u8, 256);
 			addr += 0x000100;
 			
 			
@@ -392,8 +433,8 @@ void Data_UART2PC(void)
 			Serial_SendByte(0xEE);
 			Serial_SendByte(0xEE);
 			Serial_SendByte(0xEE);
-			W25Q64_ReadData(addr, accel, 256);
-			Serial_SendArray(accel, 256);
+			W25Q64_ReadData(addr, accel.u8, 256);
+			Serial_SendArray(accel.u8, 256);
 			
 			addr += 0x000100;
 			ind ++;
@@ -404,64 +445,64 @@ void Data_UART2PC(void)
 		OLED_ShowNum(57, 2, ind-1, 3, BIG);
 }
 
-int main(void)
-{
-	
-	OLED_Init();
-	OLED_Clear();
-	Timer_Internal_Init();
-	TCM_oneAir();
-	OLED_ShowNum(0, 6, d_second, 5, BIG);
-}
-
-
-
-
-
-
-
 //int main(void)
 //{
-//			Key_Init();
-//			//Servo_Init();
-//			LED13_Init();
-//			//Beep_Init();
-//			OLED_Init();
-//			BMP280_Init();
-//			W25Q64_Init();
-//			Serial_Init();
-//			MPU6050_Init();
-//			//ShortLine_Init();
-//			OLED_Clear();
 //	
-//	
-//			OLED_ShowString(0, 0, "If send data to UART,", SML);
-//			OLED_ShowString(0, 1, "press Key plz.", SML);
-//			OLED_ShowString(0, 3, "Now:", SML);
-//			for(uint8_t i = 0; i < 31; i ++)
-//			{
-//					workModeFlag = Key_GetState();
-//					OLED_ShowNum(30, 3, workModeFlag, 1, BIG);
-//					Delay_ms(100);
-//				
-//					if(workModeFlag)
-//					{
-//							Data_UART2PC();
-//							return 0;
-//					}
-//			}
-//		
-//			Flash_ReadLast();Delay_s(5);
-//			OLED_Clear();
-//			Height_Flash_Control();
-//	
-////			{
-////						W25Q64_Init();
-////						W25Q64_SectorErase(0x000000);
-////			}
-
-////			Self_Detect();
+//	OLED_Init();
+//	OLED_Clear();
+//	Timer_Internal_Init();
+//	TCM_oneAir();
+//	OLED_ShowNum(64, 0, d_second, 5, SML);
 //}
+
+
+
+
+
+
+
+int main(void)
+{
+			Key_Init();
+			//Servo_Init();
+			LED13_Init();
+			//Beep_Init();
+			OLED_Init();
+			BMP280_Init();
+			W25Q64_Init();
+			Serial_Init();
+			MPU6050_Init();
+			//ShortLine_Init();
+			OLED_Clear();
+	
+	
+			OLED_ShowString(0, 0, "If send data to UART,", SML);
+			OLED_ShowString(0, 1, "press Key plz.", SML);
+			OLED_ShowString(0, 3, "Now:", SML);
+			for(uint8_t i = 0; i < 31; i ++)
+			{
+					workModeFlag = Key_GetState();
+					OLED_ShowNum(30, 3, workModeFlag, 1, BIG);
+					Delay_ms(100);
+				
+					if(workModeFlag)
+					{
+							Data_UART2PC();
+							return 0;
+					}
+			}
+		
+			Flash_ReadLast();Delay_s(5);
+			OLED_Clear();
+			Height_Flash_Control();
+	
+//			{
+//						W25Q64_Init();
+//						W25Q64_SectorErase(0x000000);
+//			}
+
+//			Self_Detect();
+}
 
 
 // ÖÐ¶ÏÖ»ÖÃ±êÖ¾Î»
