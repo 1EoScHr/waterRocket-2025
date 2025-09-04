@@ -1,5 +1,5 @@
-#include <stdint.h>
-#include <string.h>
+//#include <stdint.h> //自定义不需要，联合体需要
+//#include <string.h>
 #include <math.h>
 
 #include "stm32f10x.h"
@@ -17,14 +17,41 @@
 #include "ShortLine.h"
 #include "OLED_Simple.h"
 
-MPU6050_Data Data;
 
-#define DEBUG_MODE
+/*
+------宏定义------
 
+WORK_MODE							分为DETECT/DEBUG/NORMAL/ERASE四种工作模式
+DATA_HEAD_FLAG				固定的数据头，放于页首，便于定址
+DATA_HEAD_FLAG_ALL		兼容目前数据头放两个在页首、以及flash2flag函数，后面可优化
+ACC_THRESHOLD					离架判定阈值，当加速度大于此值时认为离架
+ESCAPETOWER_THRESHOLD	逃逸塔激活阈值，当动力段最大加速度小于此值逃逸塔激活
+
+*/
+
+#define DEBUG 0
+#define NORMAL 1
+#define DETECT 2
+#define ERASE 4
+
+
+#define WORK_MODE DEBUG
 #define DATA_HEAD_FLAG 0x0F
 #define DATA_HEAD_FLAG_ALL 0x0F0F
-// 逃逸塔阈值
-#define ACC_THRESHOLD  3.0
+#define ACC_THRESHOLD	2.1
+
+#if WORK_MODE == NORMAL
+	#define ESCAPETOWER_THRESHOLD  3.0
+#else
+	#define ESCAPETOWER_THRESHOLD  1.5
+#endif
+
+
+/*
+------全局变量定义------
+*/
+
+MPU6050_Data Data;
 
 union HEIGHT
 {
@@ -38,15 +65,16 @@ union ACCEL
 		float f32[64];
 };
 
-uint32_t d_second = 0;
+uint32_t d_second = 0;	//单位:0.1s
 uint8_t dummy[4];
 //uint8_t accel[256];
 //uint8_t height[256];
 union HEIGHT height;
 union ACCEL accel;
-uint8_t workModeFlag = 0;
+uint8_t UARTFlag = 0;
 uint8_t htInd = 1, acInd = 1;
 uint8_t htFlag = 0, acFlag = 0;
+uint8_t planFlag = 0, paraFlag = 0;
 
 void ErrorHandle(void)	// 报错入口
 {
@@ -82,8 +110,8 @@ void ac2arr(float acc, uint8_t* u8_arr, uint8_t ind)// 将float写进指定u8数组的in
 {
     memcpy(&u8_arr[4 * ind], &acc, sizeof(float));
 }
-
 */
+
 static inline void DataFresh(void)
 {
 		/*
@@ -238,8 +266,8 @@ void EscapeTower(uint32_t addr)	// 逃逸塔
 				
 				lastInd = acInd;
 				
-				//if(arr2ac(accel, acInd) > ACC_THRESHOLD)
-				if(accel.f32[acInd] > ACC_THRESHOLD)
+				//if(arr2ac(accel, acInd) > ESCAPETOWER_THRESHOLD)
+				if(accel.f32[acInd] > ESCAPETOWER_THRESHOLD)
 				{
 						return;
 				}
@@ -260,7 +288,7 @@ void EscapeTower(uint32_t addr)	// 逃逸塔
 }
 
 
-void Height_Flash_Control(void)	// 飞控
+void Flight_Control(void)	// 飞控
 {
 		//----------------------------------------------初始化
 
@@ -290,7 +318,7 @@ void Height_Flash_Control(void)	// 飞控
 
 		//----------------------------------------------上架静默时间，防止逃逸塔误触
 		
-		#ifndef DEBUG_MODE
+		#if WORK_MODE == NORMAL
 		for(uint8_t i = 0; i < 15; i ++)
 		{
 			LED13_on();Beep_JustLoud();
@@ -300,7 +328,7 @@ void Height_Flash_Control(void)	// 飞控
 		}
 		#endif
 
-		//----------------------------------------------接线提示&初始高度
+		//----------------------------------------------状态提示&初始高度
 		
 		OLED_ShowString(0, 2, "take off, plz", SML);
 		
@@ -330,11 +358,30 @@ void Height_Flash_Control(void)	// 飞控
 		
 		EscapeTower(addr_start); // 第一秒在逃逸塔内
 
-		while(d_second < 121)
+		while(d_second < 25)	// TCM所用数据来自1.4s-2.3s，这段时间用来收集数据
 		{
 			DataFresh();
 			OLED_ShowNum(64, 7, d_second, 3, SML);
 		}		
+		
+		float t_plane, t_para;
+		TCM_oneAir(&t_plane, &t_para);	// 这一步的计算大约需要0.1-0.2s
+		
+		while(d_second < 121)
+		{
+			DataFresh();
+			OLED_ShowNum(64, 7, d_second, 3, SML);
+			if(!planFlag && (d_second > t_plane*10))
+			{
+					planFlag = 1;
+					Dlg_relese();
+			}
+			if(!paraFlag && (d_second > t_para*10))
+			{
+					paraFlag = 1;
+					Para_relese();
+			}
+		}
 
 		Timer_Internal_DeInit();
 		
@@ -445,64 +492,78 @@ void Data_UART2PC(void)
 		OLED_ShowNum(57, 2, ind-1, 3, BIG);
 }
 
-//int main(void)
-//{
-//	
-//	OLED_Init();
-//	OLED_Clear();
-//	Timer_Internal_Init();
-//	TCM_oneAir();
-//	OLED_ShowNum(64, 0, d_second, 5, SML);
-//}
-
-
-
-
-
-
-
-int main(void)
+uint8_t UART_JUDGE(void)
 {
-			Key_Init();
-			//Servo_Init();
-			LED13_Init();
-			//Beep_Init();
-			OLED_Init();
-			BMP280_Init();
-			W25Q64_Init();
-			Serial_Init();
-			MPU6050_Init();
-			//ShortLine_Init();
-			OLED_Clear();
-	
-	
 			OLED_ShowString(0, 0, "If send data to UART,", SML);
 			OLED_ShowString(0, 1, "press Key plz.", SML);
 			OLED_ShowString(0, 3, "Now:", SML);
 			for(uint8_t i = 0; i < 31; i ++)
 			{
-					workModeFlag = Key_GetState();
-					OLED_ShowNum(30, 3, workModeFlag, 1, BIG);
+					UARTFlag = Key_GetState();
+					OLED_ShowNum(30, 3, UARTFlag, 1, BIG);
 					Delay_ms(100);
 				
-					if(workModeFlag)
+					if(UARTFlag)
 					{
 							Data_UART2PC();
-							return 0;
+							return 1;
 					}
 			}
-		
-			Flash_ReadLast();Delay_s(5);
-			OLED_Clear();
-			Height_Flash_Control();
-	
-//			{
-//						W25Q64_Init();
-//						W25Q64_SectorErase(0x000000);
-//			}
-
-//			Self_Detect();
+			
+			return 0;
 }
+
+
+int main(void)
+{
+	float t1, t2;
+	
+	OLED_Init();
+	OLED_Clear();
+	Timer_Internal_Init();
+	TCM_oneAir(&t1, &t2);
+	OLED_ShowNum(64, 0, d_second, 5, SML);
+}
+
+//int main(void)
+//{
+//			#if WORK_MODE == DETECT
+//				OLED_Init();
+//				Self_Detect();
+//				return 0;
+//			#endif
+//	
+//			#if WORK_MODE == ERASE
+//				OLED_Init();
+//				W25Q64_Init();
+//				W25Q64_SectorErase(0x000000);
+//				return 0;
+//			#endif
+//	
+//			#if WORK_MODE == NORMAL
+//				Beep_Init();	//蜂鸣器太吵，因此debug时关掉
+//			#endif
+//	
+
+//			Key_Init();
+//			//Servo_Init();
+//			LED13_Init();
+//			OLED_Init();
+//			BMP280_Init();
+//			W25Q64_Init();
+//			Serial_Init();
+//			MPU6050_Init();
+//			OLED_Clear();
+//			//ShortLine_Init();	//短接线被陀螺仪优化掉，以后为控制成本可以用一个带宏定义的离架判断模块来在陀螺仪与短接线间切换
+//	
+//			if(UART_JUDGE())
+//			{
+//					return 0;
+//			}
+//			Flash_ReadLast();Delay_s(5);
+//			OLED_Clear();
+//			Flight_Control();
+//}
 
 
 // 中断只置标志位
